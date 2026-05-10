@@ -1,0 +1,31 @@
+{$MAIN_DOMAIN} {
+    respond "OK" 200
+}
+
+{$MSG_DOMAIN} {
+    handle /presence/* {
+        reverse_proxy presence:8080
+    }
+
+    handle /_matrix/* {
+        reverse_proxy synapse:8008
+    }
+
+    handle /_synapse/* {
+        reverse_proxy synapse:8008
+    }
+
+    respond "Not Found" 404
+}
+
+{$DESK_DOMAIN} {
+    reverse_proxy ketesa:8080
+}
+
+{$PUSH_DEV_DOMAIN} {
+    reverse_proxy zyna-push-dev:8090
+}
+
+{$PUSH_PROD_DOMAIN} {
+    reverse_proxy zyna-push-prod:8090
+}
