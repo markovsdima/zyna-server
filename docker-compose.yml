@@ -1,0 +1,95 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: synapse
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    volumes:
+      - ./synapse/data:/data
+    environment:
+      SYNAPSE_CONFIG_PATH: /data/homeserver.yaml
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - synapse
+      - ketesa
+      - presence
+      - zyna-push-dev
+      - zyna-push-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/data:/data
+      - ./caddy/config:/config
+
+  coturn:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+
+  ketesa:
+    image: ghcr.io/etkecc/ketesa:latest
+    restart: unless-stopped
+    expose:
+      - "8080"
+
+  presence:
+    build:
+      context: ./zyna-presence
+    image: zyna-presence:local
+    restart: unless-stopped
+    depends_on:
+      - synapse
+    environment:
+      PORT: "8080"
+      JWT_SECRET: "${PRESENCE_JWT_SECRET:?PRESENCE_JWT_SECRET is required}"
+      SYNAPSE_URL: "http://synapse:8008"
+      LAST_SEEN_FILE: "/data/last_seen.json"
+      AUTH_MODE: "synapse"
+    volumes:
+      - presence-data:/data
+    expose:
+      - "8080"
+
+  zyna-push-dev:
+    build:
+      context: ./zyna-push
+    image: zyna-push:local
+    restart: unless-stopped
+    volumes:
+      - ./zyna-push/config.dev.yaml:/config/config.yaml:ro
+      - ./secrets/zyna-push/${APNS_KEY_FILE}:/secrets/AuthKey.p8:ro
+    expose:
+      - "8090"
+
+  zyna-push-prod:
+    build:
+      context: ./zyna-push
+    image: zyna-push:local
+    restart: unless-stopped
+    volumes:
+      - ./zyna-push/config.prod.yaml:/config/config.yaml:ro
+      - ./secrets/zyna-push/${APNS_KEY_FILE}:/secrets/AuthKey.p8:ro
+    expose:
+      - "8090"
+
+volumes:
+  presence-data:
